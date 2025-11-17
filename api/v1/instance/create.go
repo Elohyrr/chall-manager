@@ -363,21 +363,34 @@ func (man *Manager) CreateInstance(ctx context.Context, req *CreateInstanceReque
 			// Extract outputs directly without calling stack.Export()
 			fsist.ConnectionInfo = connectionInfo
 
-			// Try to get flag
+			// Try to get flags
 			if len(sr.Outputs) > 0 {
 				if flagOutput, exists := sr.Outputs["flag"]; exists && flagOutput.Value != nil {
 					flagStr := flagOutput.Value.(string)
-					fsist.Flag = &flagStr
+					fsist.Flags = []string{flagStr}
 				}
 			} else if len(outputs) > 0 {
 				if flagOutput, exists := outputs["flag"]; exists && flagOutput.Value != "" {
 					if flagStr, ok := flagOutput.Value.(string); ok {
-						fsist.Flag = &flagStr
+						fsist.Flags = []string{flagStr}
 					}
 				}
 			}
 
 			logger.Info(ctx, "extracted connection info from outputs despite Pulumi error")
+
+			// Export Pulumi state for future destroy operations
+			// Use a fresh context since the original is cancelled
+			freshCtxForExport := context.Background()
+			udp, exportErr := stack.Export(freshCtxForExport)
+			if exportErr != nil {
+				logger.Warn(ctx, "failed to export Pulumi state, destroy might fail later",
+					zap.Error(exportErr))
+			} else {
+				fsist.State = udp.Deployment
+				logger.Info(ctx, "successfully exported Pulumi state for future destroy")
+			}
+
 			// Continue with instance creation despite Pulumi error
 		} else {
 			err := &errs.ErrInternal{Sub: err}

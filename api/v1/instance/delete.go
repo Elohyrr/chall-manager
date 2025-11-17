@@ -186,23 +186,37 @@ func (man *Manager) DeleteInstance(ctx context.Context, req *DeleteInstanceReque
 		}
 		return nil, err
 	}
-	state, err := json.Marshal(fsist.State)
-	if err != nil {
-		err := &errs.ErrInternal{Sub: err}
-		logger.Error(ctx, "unmarshalling Pulumi state",
-			zap.Error(err),
-		)
-		return nil, errs.ErrInternalNoSub
-	}
-	if err := stack.Import(ctx, apitype.UntypedDeployment{
-		Version:    3,
-		Deployment: state,
-	}); err != nil {
-		err := &errs.ErrInternal{Sub: err}
-		logger.Error(ctx, "importing state",
-			zap.Error(err),
-		)
-		return nil, errs.ErrInternalNoSub
+	// Try to import existing state if available
+	if fsist.State != nil {
+		state, err := json.Marshal(fsist.State)
+		if err != nil {
+			err := &errs.ErrInternal{Sub: err}
+			logger.Error(ctx, "unmarshalling Pulumi state",
+				zap.Error(err),
+			)
+			return nil, errs.ErrInternalNoSub
+		}
+		if err := stack.Import(ctx, apitype.UntypedDeployment{
+			Version:    3,
+			Deployment: state,
+		}); err != nil {
+			err := &errs.ErrInternal{Sub: err}
+			logger.Error(ctx, "importing state",
+				zap.Error(err),
+			)
+			return nil, errs.ErrInternalNoSub
+		}
+		logger.Info(ctx, "imported existing Pulumi state")
+	} else {
+		// State is null (old instances or workaround without state export)
+		// Try to refresh from Kubernetes to rebuild state
+		logger.Warn(ctx, "Pulumi state is null, attempting to refresh from Kubernetes")
+		if _, refreshErr := stack.Refresh(ctx); refreshErr != nil {
+			logger.Warn(ctx, "failed to refresh Pulumi state from Kubernetes, destroy might fail",
+				zap.Error(refreshErr))
+		} else {
+			logger.Info(ctx, "successfully refreshed Pulumi state from Kubernetes")
+		}
 	}
 
 	logger.Info(ctx, "deleting instance")
