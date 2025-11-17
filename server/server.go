@@ -115,17 +115,17 @@ func (s *Server) listen(ctx context.Context) error {
 }
 
 func (s *Server) newGRPCServer() *grpc.Server {
-	// Create the gRPC server
-	opts := []grpc.ServerOption{
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-	}
-	grpcServer := grpc.NewServer(opts...)
-
-	// Register every services
-	challenge.RegisterChallengeStoreServer(grpcServer, challenge.NewStore())
-	instance.RegisterInstanceManagerServer(grpcServer, instance.NewManager())
-
-	return grpcServer
+    // Create the gRPC server with increased message size limits
+    opts := []grpc.ServerOption{
+        grpc.StatsHandler(otelgrpc.NewServerHandler()),
+        grpc.MaxRecvMsgSize(100 * 1024 * 1024), // 100MB au lieu de 4MB par défaut
+        grpc.MaxSendMsgSize(100 * 1024 * 1024), // 100MB au lieu de 4MB par défaut
+    }
+    grpcServer := grpc.NewServer(opts...)
+    // Register every services
+    challenge.RegisterChallengeStoreServer(grpcServer, challenge.NewStore())
+    instance.RegisterInstanceManagerServer(grpcServer, instance.NewManager())
+    return grpcServer
 }
 
 func (s *Server) newHTTPServer(ctx context.Context, grpcWebHandler http.Handler) *http.Server {

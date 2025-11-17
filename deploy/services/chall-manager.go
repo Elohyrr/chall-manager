@@ -40,6 +40,7 @@ type (
 
 		// Interface & ports network policies
 		cmToEtcd  *netwv1.NetworkPolicy
+		cmEgress  *netwv1.NetworkPolicy
 		cmjToCm   *netwv1.NetworkPolicy
 		cmFromCmj *netwv1.NetworkPolicy
 		cmToApi   *yamlv2.ConfigGroup
@@ -526,6 +527,33 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 		}
 	}
 
+	// => NetworkPolicy egress for chall-manager (DNS + registry access)
+	cm.cmEgress, err = netwv1.NewNetworkPolicy(ctx, "cm-egress", &netwv1.NetworkPolicyArgs{
+		Metadata: metav1.ObjectMetaArgs{
+			Namespace: namespace,
+			Labels: pulumi.StringMap{
+				"app.kubernetes.io/component": pulumi.String("chall-manager"),
+				"app.kubernetes.io/part-of":   pulumi.String("chall-manager"),
+				"ctfer.io/stack-name":         pulumi.String(ctx.Stack()),
+			},
+		},
+		Spec: netwv1.NetworkPolicySpecArgs{
+			PolicyTypes: pulumi.ToStringArray([]string{
+				"Egress",
+			}),
+			PodSelector: metav1.LabelSelectorArgs{
+				MatchLabels: cm.cm.PodLabels,
+			},
+			Egress: netwv1.NetworkPolicyEgressRuleArray{
+				// Allow all egress traffic (no restrictions)
+				netwv1.NetworkPolicyEgressRuleArgs{},
+			},
+		},
+	}, opts...)
+	if err != nil {
+		return
+	}
+
 	// => NetworkPolicy from chall-manager-janitor to chall-manager
 	cm.cmjToCm, err = netwv1.NewNetworkPolicy(ctx, "cmj-to-cm", &netwv1.NetworkPolicyArgs{
 		Metadata: metav1.ObjectMetaArgs{
@@ -544,6 +572,7 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 				MatchLabels: cm.cmj.PodLabels,
 			},
 			Egress: netwv1.NetworkPolicyEgressRuleArray{
+				// Allow janitor to reach chall-manager
 				netwv1.NetworkPolicyEgressRuleArgs{
 					To: netwv1.NetworkPolicyPeerArray{
 						netwv1.NetworkPolicyPeerArgs{
@@ -561,6 +590,24 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 						netwv1.NetworkPolicyPortArgs{
 							Port:     parseEndpoint(cm.cm.Endpoint),
 							Protocol: pulumi.String("TCP"),
+						},
+					},
+				},
+				// Allow DNS resolution
+				netwv1.NetworkPolicyEgressRuleArgs{
+					To: netwv1.NetworkPolicyPeerArray{
+						netwv1.NetworkPolicyPeerArgs{
+							NamespaceSelector: metav1.LabelSelectorArgs{
+								MatchLabels: pulumi.StringMap{
+									"kubernetes.io/metadata.name": pulumi.String("kube-system"),
+								},
+							},
+						},
+					},
+					Ports: netwv1.NetworkPolicyPortArray{
+						netwv1.NetworkPolicyPortArgs{
+							Port:     pulumi.Int(53),
+							Protocol: pulumi.String("UDP"),
 						},
 					},
 				},
@@ -589,6 +636,7 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 				MatchLabels: cm.cm.PodLabels,
 			},
 			Ingress: netwv1.NetworkPolicyIngressRuleArray{
+				// Allow janitor in same namespace
 				netwv1.NetworkPolicyIngressRuleArgs{
 					From: netwv1.NetworkPolicyPeerArray{
 						netwv1.NetworkPolicyPeerArgs{
@@ -605,6 +653,24 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 					Ports: netwv1.NetworkPolicyPortArray{
 						netwv1.NetworkPolicyPortArgs{
 							Port:     parseEndpoint(cm.cm.Endpoint),
+							Protocol: pulumi.String("TCP"),
+						},
+					},
+				},
+				// Allow CTFd from ctfd namespace
+				netwv1.NetworkPolicyIngressRuleArgs{
+					From: netwv1.NetworkPolicyPeerArray{
+						netwv1.NetworkPolicyPeerArgs{
+							NamespaceSelector: metav1.LabelSelectorArgs{
+								MatchLabels: pulumi.StringMap{
+									"kubernetes.io/metadata.name": pulumi.String("ctfd"),
+								},
+							},
+						},
+					},
+					Ports: netwv1.NetworkPolicyPortArray{
+						netwv1.NetworkPolicyPortArgs{
+							Port:     pulumi.Int(8080),
 							Protocol: pulumi.String("TCP"),
 						},
 					},

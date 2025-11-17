@@ -112,7 +112,7 @@ type (
 const (
 	port      = 8080
 	portKey   = "grpc"
-	directory = "/etc/chall-manager"
+	directory = "/data/chall-manager"
 	coverdir  = "/etc/coverdir"
 
 	defaultPVCStorageSize = "2Gi"
@@ -632,7 +632,7 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 								}
 								return envs
 							}).(corev1.EnvVarArrayOutput),
-							ImagePullPolicy: pulumi.String("Always"),
+							ImagePullPolicy: pulumi.String("IfNotPresent"),
 							Ports: corev1.ContainerPortArray{
 								corev1.ContainerPortArgs{
 									Name:          pulumi.String(portKey),
@@ -719,7 +719,6 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 			},
 		},
 		Spec: corev1.ServiceSpecArgs{
-			ClusterIP: pulumi.String("None"), // Headless, for DNS purposes
 			Ports: corev1.ServicePortArray{
 				corev1.ServicePortArgs{
 					Name: pulumi.String(portKey),

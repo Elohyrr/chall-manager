@@ -2,7 +2,9 @@ package scenario
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -149,7 +151,7 @@ func DecodeOCI(
 
 	// Get the corresponding directory
 	dir := filepath.Join(global.CacheDir(), "oci", dig)
-	fs, err := file.New(dir)
+	fs, err := file.NewWithFallbackLimit(dir, 100*1024*1024) // 100 Mb au lieu de 4Mb
 	if err != nil {
 		return "", err
 	}
@@ -169,11 +171,18 @@ func DecodeOCI(
 	}
 
 	// 2. Copy from the remote repository to the file store
-	if _, err := oras.Copy(ctx,
+	desc, err := oras.Copy(ctx,
 		repo, dig, // remote image
 		fs, dig, // filesystem image
 		oras.DefaultCopyOptions,
-	); err != nil {
+	)
+	if err != nil {
+		return "", err
+	}
+
+	// 2.5. Extract files from the store to the directory root
+	// The file store saves blobs by digest, we need to extract them with their proper names
+	if err := extractFilesFromStore(ctx, fs, desc, dir); err != nil {
 		return "", err
 	}
 
@@ -235,4 +244,57 @@ func resolve(
 	}
 
 	return r.(reference.Named).Name(), dig, nil
+}
+
+// extractFilesFromStore extracts files from the ORAS file store to the directory root
+// using the org.opencontainers.image.title annotation as the filename
+func extractFilesFromStore(ctx context.Context, store *file.Store, desc v1.Descriptor, dir string) error {
+	// Fetch the manifest
+	manifestBytes, err := store.Fetch(ctx, desc)
+	if err != nil {
+		return err
+	}
+	defer manifestBytes.Close()
+
+	// Parse the manifest
+	manifestData, err := io.ReadAll(manifestBytes)
+	if err != nil {
+		return err
+	}
+
+	var manifest v1.Manifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		return err
+	}
+
+	// Extract each layer
+	for _, layer := range manifest.Layers {
+		// Get the filename from the annotation
+		filename, ok := layer.Annotations["org.opencontainers.image.title"]
+		if !ok {
+			// Skip if no title annotation
+			continue
+		}
+
+		// Fetch the blob content
+		blobReader, err := store.Fetch(ctx, layer)
+		if err != nil {
+			return err
+		}
+
+		// Read all blob content
+		blobData, err := io.ReadAll(blobReader)
+		blobReader.Close()
+		if err != nil {
+			return err
+		}
+
+		// Write to file
+		destPath := filepath.Join(dir, filename)
+		if err := os.WriteFile(destPath, blobData, 0644); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/ctfer-io/chall-manager/pkg/fs"
 	"github.com/ctfer-io/chall-manager/pkg/iac"
 	"github.com/ctfer-io/chall-manager/pkg/identity"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 )
 
 func (man *Manager) CreateInstance(ctx context.Context, req *CreateInstanceRequest) (*Instance, error) {
@@ -298,18 +299,11 @@ func (man *Manager) CreateInstance(ctx context.Context, req *CreateInstanceReque
 		return nil, errs.ErrInternalNoSub
 	}
 
-	sr, err := stack.Up(ctx)
-	if err != nil {
-		err := &errs.ErrInternal{Sub: err}
-		logger.Error(ctx, "stack up",
-			zap.Error(multierr.Combine(
-				clock.RUnlock(ctx),
-				fs.Wash(fschall.Directory, id),
-				err,
-			)),
-		)
-		return nil, errs.ErrInternalNoSub
-	}
+	// Create a context with 3 minute timeout for Pulumi
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+
+	sr, err := stack.Up(ctxWithTimeout)
 
 	now := time.Now()
 	fsist := &fs.Instance{
@@ -320,14 +314,93 @@ func (man *Manager) CreateInstance(ctx context.Context, req *CreateInstanceReque
 		Until:       common.ComputeUntil(fschall.Until, fschall.Timeout),
 		Additional:  req.Additional,
 	}
-	if err := iac.Extract(ctx, stack, sr, fsist); err != nil {
-		logger.Error(ctx, "extracting stack info",
-			zap.Error(multierr.Combine(
-				clock.RUnlock(ctx),
-				err,
-			)),
-		)
-		return nil, errs.ErrInternalNoSub
+
+	// WORKAROUND: If Pulumi fails but connection_info exists, consider it successful
+	// This handles the Service endpoint timeout bug where all resources are created
+	// but Pulumi times out waiting for Service endpoints validation
+	if err != nil {
+		logger.Warn(ctx, "Pulumi stack.Up() failed, attempting to retrieve outputs",
+			zap.Error(err),
+			zap.Int("sr_outputs_count", len(sr.Outputs)))
+
+		// Try to get outputs from stack state if sr.Outputs is empty
+		// Use a fresh context since the original may be canceled
+		var outputs map[string]auto.OutputValue
+		if len(sr.Outputs) == 0 {
+			freshCtx := context.Background()
+			var outputsErr error
+			outputs, outputsErr = stack.Outputs(freshCtx)
+			if outputsErr != nil {
+				logger.Warn(ctx, "failed to retrieve outputs from stack", zap.Error(outputsErr))
+			} else {
+				logger.Info(ctx, "retrieved outputs from stack state", zap.Int("outputs_count", len(outputs)))
+			}
+		}
+
+		// Check for connection_info in either sr.Outputs or refreshed outputs
+		var connectionInfo string
+		var foundConnectionInfo bool
+
+		if len(sr.Outputs) > 0 {
+			if ci, exists := sr.Outputs["connection_info"]; exists && ci.Value != nil {
+				connectionInfo = ci.Value.(string)
+				foundConnectionInfo = true
+			}
+		} else if len(outputs) > 0 {
+			if ci, exists := outputs["connection_info"]; exists && ci.Value != "" {
+				if ciStr, ok := ci.Value.(string); ok {
+					connectionInfo = ciStr
+					foundConnectionInfo = true
+				}
+			}
+		}
+
+		if foundConnectionInfo {
+			logger.Warn(ctx, "Pulumi failed but connection_info exists, considering successful",
+				zap.Error(err),
+				zap.String("connection_info", connectionInfo))
+
+			// Extract outputs directly without calling stack.Export()
+			fsist.ConnectionInfo = connectionInfo
+
+			// Try to get flag
+			if len(sr.Outputs) > 0 {
+				if flagOutput, exists := sr.Outputs["flag"]; exists && flagOutput.Value != nil {
+					flagStr := flagOutput.Value.(string)
+					fsist.Flag = &flagStr
+				}
+			} else if len(outputs) > 0 {
+				if flagOutput, exists := outputs["flag"]; exists && flagOutput.Value != "" {
+					if flagStr, ok := flagOutput.Value.(string); ok {
+						fsist.Flag = &flagStr
+					}
+				}
+			}
+
+			logger.Info(ctx, "extracted connection info from outputs despite Pulumi error")
+			// Continue with instance creation despite Pulumi error
+		} else {
+			err := &errs.ErrInternal{Sub: err}
+			logger.Error(ctx, "stack up failed with no connection_info in outputs",
+				zap.Error(multierr.Combine(
+					clock.RUnlock(ctx),
+					fs.Wash(fschall.Directory, id),
+					err,
+				)),
+			)
+			return nil, errs.ErrInternalNoSub
+		}
+	} else {
+		// Pulumi succeeded, extract normally
+		if extractErr := iac.Extract(ctx, stack, sr, fsist); extractErr != nil {
+			logger.Error(ctx, "extracting stack info",
+				zap.Error(multierr.Combine(
+					clock.RUnlock(ctx),
+					extractErr,
+				)),
+			)
+			return nil, errs.ErrInternalNoSub
+		}
 	}
 
 	// Save fsist

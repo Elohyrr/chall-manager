@@ -75,6 +75,18 @@ func up(ctx context.Context, dir, id string, fschall *fs.Challenge, fsist *fs.In
 		return err
 	}
 	if err != nil {
+		// WORKAROUND: If Pulumi fails but outputs exist, consider it successful
+		// This handles the Service endpoint timeout bug where all resources are created
+		// but Pulumi times out waiting for Service endpoints validation
+		if len(sr.Outputs) > 0 {
+			if connectionInfo, exists := sr.Outputs["connection_info"]; exists && connectionInfo.Value != nil {
+				global.Log().Warn(ctx, "Pulumi failed but connection_info exists, considering successful",
+					zap.Error(err),
+					zap.String("connection_info", connectionInfo.Value.(string)))
+				return nil
+			}
+		}
+
 		if fserr := fsist.Save(); fserr != nil {
 			return err
 		}

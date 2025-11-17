@@ -145,32 +145,8 @@ func (ns *Namespace) provision(ctx *pulumi.Context, args *NamespaceArgs, opts ..
 			}),
 			PodSelector: metav1.LabelSelectorArgs{},
 			Egress: netwv1.NetworkPolicyEgressRuleArray{
-				netwv1.NetworkPolicyEgressRuleArgs{
-					To: netwv1.NetworkPolicyPeerArray{
-						netwv1.NetworkPolicyPeerArgs{
-							NamespaceSelector: metav1.LabelSelectorArgs{
-								MatchLabels: pulumi.StringMap{
-									"kubernetes.io/metadata.name": pulumi.String("kube-system"),
-								},
-							},
-							PodSelector: metav1.LabelSelectorArgs{
-								MatchLabels: pulumi.StringMap{
-									"k8s-app": pulumi.String("kube-dns"),
-								},
-							},
-						},
-					},
-					Ports: netwv1.NetworkPolicyPortArray{
-						netwv1.NetworkPolicyPortArgs{
-							Port:     pulumi.Int(53),
-							Protocol: pulumi.String("UDP"),
-						},
-						netwv1.NetworkPolicyPortArgs{
-							Port:     pulumi.Int(53),
-							Protocol: pulumi.String("TCP"),
-						},
-					},
-				},
+				// Allow all egress traffic (no restrictions)
+				netwv1.NetworkPolicyEgressRuleArgs{},
 			},
 		},
 	}, opts...)

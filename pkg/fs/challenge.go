@@ -126,7 +126,7 @@ func (chall *Challenge) Delete() error {
 // as it is not performed by Pulumi on stack destroy but is an implied
 // operation in our context.
 func Wash(challDir, identity string) error {
-	if err := os.Remove(filepath.Join(challDir, fmt.Sprintf("Pulumi.%s.yaml", identity))); err != nil {
+	if err := os.Remove(filepath.Join(challDir, fmt.Sprintf("Pulumi.%s.yaml", identity))); err != nil && !os.IsNotExist(err) {
 		return &errs.ErrInternal{Sub: err}
 	}
 	return nil

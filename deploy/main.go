@@ -182,7 +182,13 @@ func loadConfig(ctx *pulumi.Context) *Config {
 
 	var ociC OCIConfig
 	_ = cfg.TryObject("oci", &ociC)
-	ociC.Insecure = ociC.Insecure || cfg.GetBool("oci-insecure") // usefull for CI which cannot use --path
+	ociC.Insecure = ociC.Insecure || cfg.GetBool("oci.insecure") // usefull for CI which cannot use --path
+	if v := cfg.Get("oci.username"); v != "" {
+		ociC.Username = v
+	}
+	if v := cfg.Get("oci.password"); v != "" {
+		ociC.Password = v
+	}
 	c.OCI = &ociC
 
 	return c
