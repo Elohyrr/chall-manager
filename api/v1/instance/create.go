@@ -279,7 +279,7 @@ func (man *Manager) CreateInstance(ctx context.Context, req *CreateInstanceReque
 	// elseway the challenge could be deleted even if we are working on it.
 
 	// Spin up
-	stack, err := iac.NewStack(ctx, id, fschall)
+	stack, err := iac.NewStack(ctx, id, fschall, req.SourceId)
 	if err != nil {
 		logger.Error(ctx, "building new stack",
 			zap.Error(multierr.Combine(
@@ -300,7 +300,7 @@ func (man *Manager) CreateInstance(ctx context.Context, req *CreateInstanceReque
 	}
 
 	// Create a context with 3 minute timeout for Pulumi
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
 
 	sr, err := stack.Up(ctxWithTimeout)
