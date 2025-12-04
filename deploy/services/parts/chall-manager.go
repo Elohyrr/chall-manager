@@ -360,6 +360,7 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 		// => ServiceAccount
 		cm.sa, err = corev1.NewServiceAccount(ctx, "chall-manager-account", &corev1.ServiceAccountArgs{
 			Metadata: metav1.ObjectMetaArgs{
+				Name:      pulumi.String("chall-manager-account"),
 				Namespace: args.Namespace,
 				Labels: pulumi.StringMap{
 					"app.kubernetes.io/component": pulumi.String("chall-manager"),
@@ -711,6 +712,7 @@ func (cm *ChallManager) provision(ctx *pulumi.Context, args *ChallManagerArgs, o
 	// => Service
 	cm.svc, err = corev1.NewService(ctx, "chall-manager-service", &corev1.ServiceArgs{
 		Metadata: metav1.ObjectMetaArgs{
+			Name:      pulumi.String("chall-manager-service"),
 			Namespace: args.Namespace,
 			Labels: pulumi.StringMap{
 				"app.kubernetes.io/component": pulumi.String("chall-manager"),

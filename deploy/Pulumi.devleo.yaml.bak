@@ -1,0 +1,41 @@
+config:
+  chall-manager:enable-cilium: "false"
+  chall-manager:cm-to-apiserver-template: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: chall-manager-to-apiserver-{{ .Stack }}
+      namespace: {{ .Namespace }}
+    spec:
+      podSelector:
+        matchLabels:
+          {{- range $key, $value := .PodLabels }}
+          {{ $key }}: {{ $value }}
+          {{- end }}
+      policyTypes:
+      - Egress
+      egress:
+      - to:
+        - namespaceSelector: {}
+        ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+  chall-manager:otel.endpoint: ""
+  chall-manager:otel.insecure: "false"
+  chall-manager:oci.username: ""
+  chall-manager:oci.password: ""
+  chall-manager:oci.insecure: "true"
+  chall-manager:namespace: dev
+  chall-manager:tag: local-fixed-v2
+  chall-manager:registry: ""
+  chall-manager:etcd.replicas: "0"
+  chall-manager:replicas: "1"
+  chall-manager:swagger: "false"
+  chall-manager:pvc-access-mode: ReadWriteOnce
+  chall-manager:pvc-storage-size: 2Gi
+  chall-manager:expose: "false"
+  chall-manager:log-level: info
+  chall-manager:kubeconfig:
+    secure: AAABAMlfqRNltlJxROrnn5P7/oSMMknPvuFjllEXx30=

@@ -1,5 +1,6 @@
 config:
   chall-manager:enable-cilium: "false"
+  chall-manager:cm-to-apiserver-template: "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: chall-manager-to-apiserver-{{ .Stack }}\n  namespace: {{ .Namespace }}\nspec:\n  podSelector:\n    matchLabels:\n      {{- range $key, $value := .PodLabels }}\n      {{ $key }}: {{ $value }}\n      {{- end }}\n  policyTypes:\n  - Egress\n  egress:\n  - to:\n    - namespaceSelector: {}\n    ports:\n    - protocol: TCP\n      port: 6443\n    - protocol: TCP\n      port: 443"
   chall-manager:otel.endpoint: ""
   chall-manager:otel.insecure: "false"
   chall-manager:oci.username: ""
@@ -17,3 +18,23 @@ config:
   chall-manager:log-level: info
   chall-manager:kubeconfig:
     secure: AAABAMlfqRNltlJxROrnn5P7/oSMMknPvuFjllEXx30=
+  chall-manager:etcd:
+    replicas: 0
+  chall-manager:janitor:
+    cron: ""
+    mode: cron
+    ticker: ""
+  chall-manager:limits:
+    cpu: "4.0"
+    memory: 5Gi
+  chall-manager:oci:
+    insecure: false
+    password: ""
+    username: ""
+  chall-manager:otel:
+    endpoint: ""
+    insecure: false
+  chall-manager:requests:
+    cpu: "1.0"
+    memory: 1Gi
+  chall-manager:romeo-claim-name: ""

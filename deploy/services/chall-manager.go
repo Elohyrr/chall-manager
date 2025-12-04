@@ -128,24 +128,27 @@ const (
 	defaultReplicas = 1
 
 	defaultCmToApiServerTemplate = `
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
-  name: cilium-seed-apiserver-allow-{{ .Stack }}
+  name: chall-manager-to-apiserver-{{ .Stack }}
   namespace: {{ .Namespace }}
 spec:
-  endpointSelector:
+  podSelector:
     matchLabels:
     {{- range $k, $v := .PodLabels }}
       {{ $k }}: {{ $v }}
     {{- end }}
+  policyTypes:
+  - Egress
   egress:
-  - toEntities:
-    - kube-apiserver
-  - toPorts:
-    - ports:
-      - port: "6443"
-        protocol: TCP
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 6443
+    - protocol: TCP
+      port: 443
 `
 )
 
