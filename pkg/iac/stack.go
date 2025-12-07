@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func NewStack(ctx context.Context, id string, fschall *fs.Challenge, sourceId string) (auto.Stack, error) {
+func NewStack(ctx context.Context, id string, fschall *fs.Challenge, sourceId string, challengeId string) (auto.Stack, error) {
 	stack, err := LoadStack(ctx, fschall.Directory, id)
 	if err != nil {
 		return auto.Stack{}, &errs.ErrInternal{Sub: err}
@@ -31,6 +31,11 @@ func NewStack(ctx context.Context, id string, fschall *fs.Challenge, sourceId st
 	// Add source_id to config if present
 	if sourceId != "" {
 		configMap["source_id"] = auto.ConfigValue{Value: sourceId}
+	}
+
+	// Add challenge_id to config if present
+	if challengeId != "" {
+		configMap["challenge_id"] = auto.ConfigValue{Value: challengeId}
 	}
 
 	if err := stack.SetAllConfig(ctx, configMap); err != nil {
