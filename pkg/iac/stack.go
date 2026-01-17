@@ -25,15 +25,27 @@ type Stack struct {
 	pas auto.Stack
 }
 
-func NewStack(ctx context.Context, fschall *fsapi.Challenge, id string) (*Stack, error) {
+func NewStack(ctx context.Context, fschall *fsapi.Challenge, id string, sourceId string, challengeId string) (*Stack, error) {
 	stack, err := LoadStack(ctx, fschall.Scenario, id)
 	if err != nil {
 		return nil, &errs.ErrInternal{Sub: err}
 	}
 
-	if err := stack.pas.SetAllConfig(ctx, auto.ConfigMap{
+	configMap := auto.ConfigMap{
 		"identity": auto.ConfigValue{Value: id},
-	}); err != nil {
+	}
+
+	// Add source_id to config if present
+	if sourceId != "" {
+		configMap["source_id"] = auto.ConfigValue{Value: sourceId}
+	}
+
+	// Add challenge_id to config if present
+	if challengeId != "" {
+		configMap["challenge_id"] = auto.ConfigValue{Value: challengeId}
+	}
+
+	if err := stack.pas.SetAllConfig(ctx, configMap); err != nil {
 		return nil, &errs.ErrInternal{Sub: err}
 	}
 
@@ -116,7 +128,7 @@ type Result struct {
 func (stack *Stack) Up(ctx context.Context) (*Result, error) {
 	// Use a timeout to avoid waiting forever for Kubernetes Service endpoints
 	// Pulumi waits for Service endpoints by default which can take 10+ minutes
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 10000*time.Millisecond)
 	defer cancel()
 
 	res, err := stack.pas.Up(ctxWithTimeout)
@@ -165,6 +177,11 @@ func (stack *Stack) Preview(ctx context.Context) error {
 
 func (stack *Stack) Down(ctx context.Context) error {
 	_, err := stack.pas.Destroy(ctx)
+	return err
+}
+
+func (stack *Stack) Refresh(ctx context.Context) error {
+	_, err := stack.pas.Refresh(ctx)
 	return err
 }
 

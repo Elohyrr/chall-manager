@@ -321,7 +321,7 @@ func (man *Manager) CreateInstance(ctx context.Context, req *CreateInstanceReque
 	// elseway the challenge could be deleted even if we are working on it.
 
 	// Spin up
-	stack, err := iac.NewStack(ctx, fschall, id)
+	stack, err := iac.NewStack(ctx, fschall, id, req.SourceId, req.ChallengeId)
 	if err != nil {
 		logger.Error(ctx, "building new stack",
 			zap.Error(multierr.Combine(

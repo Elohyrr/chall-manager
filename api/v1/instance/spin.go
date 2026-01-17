@@ -107,7 +107,7 @@ func SpinUp(ctx context.Context, challengeID string) {
 	ctx = global.WithIdentity(ctx, id)
 
 	// 10. Spin up instance
-	stack, err := iac.NewStack(ctx, fschall, id)
+	stack, err := iac.NewStack(ctx, fschall, id, "", challengeID) // No source_id for pool instances
 	if err != nil {
 		logger.Error(ctx, "building new stack",
 			zap.Error(err),

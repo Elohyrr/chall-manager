@@ -568,14 +568,30 @@ func (emp *exposedMultipod) provision(ctx *pulumi.Context, args ExposedMultipodA
 			svc, err := corev1.NewService(ctx, fmt.Sprintf("emp-svc-%s-%d", rawName, i), &corev1.ServiceArgs{
 				Metadata: metav1.ObjectMetaArgs{
 					Annotations: func() pulumi.StringMapOutput {
-						// If is exposed directly, plug it the annotations
+						// Base annotations with skipAwait to avoid waiting for endpoints
+						// This prevents the 10-minute timeout issue where Pulumi waits
+						// for Service endpoints to be populated before considering it ready.
+						// The Deployment already waits for pods to be ready, so this is safe.
+						baseAnnotations := pulumi.StringMap{
+							"pulumi.com/skipAwait": pulumi.String("true"),
+						}
+
+						// If is exposed directly, merge with user annotations
 						if slices.Contains([]ExposeType{
 							ExposeNodePort,
 							ExposeLoadBalancer,
 						}, pet) {
-							return p.Annotations()
+							return pulumi.All(baseAnnotations, p.Annotations()).ApplyT(func(all []any) map[string]string {
+								base := all[0].(map[string]string)
+								user := all[1].(map[string]string)
+								// User annotations override base
+								for k, v := range user {
+									base[k] = v
+								}
+								return base
+							}).(pulumi.StringMapOutput)
 						}
-						return pulumi.StringMap{}.ToStringMapOutput()
+						return baseAnnotations.ToStringMapOutput()
 					}(),
 					Labels: labels,
 					Name: pulumi.All(args.Identity(), args.Label(), name, p.Port(), p.Protocol()).ApplyT(func(all []any) string {
