@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
 	"github.com/ctfer-io/chall-manager/global"
@@ -126,43 +124,10 @@ type Result struct {
 }
 
 func (stack *Stack) Up(ctx context.Context) (*Result, error) {
-	// Use a timeout to avoid waiting forever for Kubernetes Service endpoints
-	// Pulumi waits for Service endpoints by default which can take 10+ minutes
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 10000*time.Millisecond)
-	defer cancel()
-
-	res, err := stack.pas.Up(ctxWithTimeout)
+	// With skipAwait annotation on Services, Pulumi should not wait for endpoints
+	// The Deployment will still wait for pods to be Ready, which is what we want
+	res, err := stack.pas.Up(ctx)
 	if err != nil {
-		// WORKAROUND: If Pulumi fails but resources were created, try to recover outputs
-		// This handles the Service endpoint timeout bug where all resources are created
-		// but Pulumi times out waiting for Service endpoints validation
-		logger := global.Log()
-		logger.Warn(ctx, "Pulumi stack.Up() failed, attempting to retrieve outputs",
-			zap.Error(err))
-
-		// Try to get outputs from stack state using a fresh context
-		freshCtx := context.Background()
-		outputs, outputsErr := stack.pas.Outputs(freshCtx)
-		if outputsErr != nil {
-			logger.Warn(ctx, "failed to retrieve outputs from stack", zap.Error(outputsErr))
-			return nil, err // Return original error
-		}
-
-		// Check if connection_info exists in outputs
-		if ci, exists := outputs["connection_info"]; exists && ci.Value != nil {
-			logger.Warn(ctx, "Pulumi failed but connection_info exists, considering successful",
-				zap.Error(err),
-				zap.String("connection_info", ci.Value.(string)))
-
-			// Build a synthetic result from the outputs
-			return &Result{
-				sub: auto.UpResult{
-					Outputs: outputs,
-				},
-			}, nil
-		}
-
-		// No connection_info found, return original error
 		return nil, err
 	}
 	return &Result{
